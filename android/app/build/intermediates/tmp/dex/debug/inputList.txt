@@ -1,0 +1,15 @@
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/classes/debug
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/slf4j-android-1.7.7-969ade3d050f79e3094afe61a7af57e8039a9750.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/slf4j-api-1.7.7-ccd307c8d6beb1ebb91bfe0372de57f10a4a3dea.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/mapsforge-map-reader-0.4.3-a71b3a6840d97c32a6a8a5b00b530c33914319ee.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/svg-android-0.4.3-376bbe9609ee6a0d467c6d37e5f00220a5dbdc49.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/mapsforge-map-android-0.4.3-a901fa031dd405e6ac10ece67496952bff08c8b5.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/mapsforge-core-0.4.3-359f7656ea8e80bd170f5dfd0da608e896bb5200.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/kxml2-2.3.0-086d482f2559de78e98dd306872ecb52bb435976.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/commons-io-1.3.1-003223eb0f19541f8638203f173fa2ee6555b891.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/osmosis-osm-binary-0.43.1-573450a32f819f4af1b039eb6d51c56d4dca4126.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/mapsforge-map-0.4.3-047d523d84bc65b16cad5f1dfd927b7cbf4719a8.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/protobuf-java-2.6.0-1c4c6e51e213cdcf981e673698175b6e537e7778.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/graphhopper-0.4-SNAPSHOT-030749cbc472f02146cc83e9912b021469a15e42.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/xmlgraphics-commons-1.5-b75af872af1b7cf8d5dc3639576f4f872db8b9cf.jar
+/home/peterk/Dokumente/quell/graphhopper-android/app/build/intermediates/pre-dexed/debug/trove4j-3.0.3-b2842a0504b69edcc525844e2f3f218e40d822b7.jar

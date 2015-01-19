@@ -1,0 +1,47 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 19
+    buildToolsVersion "21.1.2"
+
+    defaultConfig {
+        applicationId "com.graphhopper.android"
+        minSdkVersion 8
+        targetSdkVersion 19
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+}
+
+/** only necessary if you need to use latest SNAPSHOT
+configurations.all {
+    // check for updates every build
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}
+ **/
+
+dependencies {
+    compile group: 'com.graphhopper', name: 'graphhopper', version: '0.4-SNAPSHOT'
+
+    compile group: 'org.mapsforge', name: 'mapsforge-core', version: '0.4.3'
+    compile group: 'org.mapsforge', name: 'mapsforge-map', version: '0.4.3'
+    compile group: 'org.mapsforge', name: 'mapsforge-map-android', version: '0.4.3'
+    compile group: 'org.mapsforge', name: 'mapsforge-map-reader', version: '0.4.3'
+
+    compile group: 'org.slf4j', name: 'slf4j-android', version: '1.7.7'
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.7'
+
+    /*
+    compile files('libs/graphhopper-0.4-SNAPSHOT-android.jar')
+    compile files('libs/mapsforge-core-0.4.3.jar')
+    compile files('libs/mapsforge-map-0.4.3.jar')
+    compile files('libs/mapsforge-map-android-0.4.3.jar')
+    compile files('libs/mapsforge-map-reader-0.4.3.jar')
+    compile files('libs/slf4j-android-1.6.1-RC1.jar')
+    */
+}
