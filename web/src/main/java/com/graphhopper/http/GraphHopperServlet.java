@@ -1,14 +1,14 @@
 /*
  *  Licensed to GraphHopper and Peter Karich under one or more contributor
- *  license agreements. See the NOTICE file distributed with this work for 
+ *  license agreements. See the NOTICE file distributed with this work for
  *  additional information regarding copyright ownership.
- * 
- *  GraphHopper licenses this file to you under the Apache License, 
- *  Version 2.0 (the "License"); you may not use this file except in 
+ *
+ *  GraphHopper licenses this file to you under the Apache License,
+ *  Version 2.0 (the "License"); you may not use this file except in
  *  compliance with the License. You may obtain a copy of the License at
- * 
+ *
  *       http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  *  Unless required by applicable law or agreed to in writing, software
  *  distributed under the License is distributed on an "AS IS" BASIS,
  *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -44,6 +44,8 @@ import org.json.JSONObject;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
+import com.google.common.collect.MinMaxPriorityQueue;
+
 /**
  * Servlet to use GraphHopper in a remote application (mobile or browser). Attention: If type is
  * json it returns the points in GeoJson format (longitude,latitude) unlike the format "lat,lon"
@@ -56,25 +58,142 @@ public class GraphHopperServlet extends GHBaseServlet
     @Inject
     private GraphHopper hopper;
 
-    @Override
-    public void doGet( HttpServletRequest req, HttpServletResponse res ) throws ServletException, IOException
-    {
-        try
-        {
-            writePath(req, res);
-        } catch (IllegalArgumentException ex)
-        {
-            writeError(res, SC_BAD_REQUEST, ex.getMessage());
-        } catch (Exception ex)
-        {
-            logger.error("Error while executing request: " + req.getQueryString(), ex);
-            writeError(res, SC_INTERNAL_SERVER_ERROR, "Problem occured:" + ex.getMessage());
+    public static class PEdge {
+      public int edge;
+      public double dist;
+
+      public static Comparator<PEdge> compare = new Comparator<PEdge>() {
+        public int compare(PEdge a, PEdge b) {
+          return (a.dist > b.dist) ? 1 : -1;
         }
+      };
     }
 
-    void writePath( HttpServletRequest httpReq, HttpServletResponse res ) throws Exception
+    public static class PRoute {
+        public long dist; // XXX time or distance?
+        public JSONObject resp;
+
+        public static Comparator<PRoute> compare = new Comparator<PRoute>() {
+          public int compare(PRoute a, PRoute b) {
+            return (a.dist > b.dist) ? 1 : -1;
+          }
+        };
+    }
+
+    /* Use GREAT CIRCLE to find "nearest" edges in graph to the given GHPoint
+       This is helpful for cases where a destination point may not have any
+       connectivity to permitted edges and avoid outright failing to find a route.
+     */
+    public List<GHPoint> getNearbyEdges(GHPoint req) {
+      List<GHPoint> points = new ArrayList<GHPoint>();
+
+      MinMaxPriorityQueue<PEdge> pq = MinMaxPriorityQueue.orderedBy(PEdge.compare).maximumSize(10).create();
+      DistanceCalcEarth calc = new DistanceCalcEarth();
+      EdgeIterator iter = hopper.getGraph().getAllEdges();
+
+/*
+      LocationIndex index = hopper.getLocationIndex();
+      PEdge tmp = new PEdge();
+      tmp.dist = 0; // XXX assume the original start/end are dist=0..
+      tmp.edge = 
+      pq.add(tmp);
+*/
+
+      while (iter.next()) {
+        double dist;
+
+        dist = calc.calcDist(hopper.getGraph().getNodeAccess().getLatitude( iter.getEdge() ), hopper.getGraph().getNodeAccess().getLongitude( iter.getEdge() ), req.lat, req.lon);
+
+        tmp = new PEdge();
+        tmp.dist = dist;
+        tmp.edge = iter.getEdge();
+        pq.add(tmp);
+
+      }
+
+      for (PEdge p : pq) {
+        GHPoint pt = new GHPoint(hopper.getGraph().getNodeAccess().getLatitude(p.edge), hopper.getGraph().getNodeAccess().getLongitude(p.edge));
+        points.add(pt);
+      }
+
+      return points;
+    }
+
+    @Override
+    public void doGet( HttpServletRequest req, HttpServletResponse resp ) throws ServletException, IOException
     {
-        List<GHPoint> infoPoints = getPoints(httpReq, "point");
+
+        // Save routes and find the best/fastest
+        MinMaxPriorityQueue<PRoute> pr = MinMaxPriorityQueue.orderedBy(PRoute.compare).maximumSize(5).create();
+
+        List<GHPoint> infoPoints = getPoints(req, "point");
+
+        // Find nearby START points for alternative routes
+        List<GHPoint> startEdges = getNearbyEdges(infoPoints.get(0));
+
+        // Find nearby END points for alternative routes
+        List<GHPoint> destEdges = getNearbyEdges(infoPoints.get(infoPoints.size() - 1));
+
+        // XXX Workaround: Only use the nearby edges for CAR traversals
+        if (getParam(req, "vehicle", "CAR").toUpperCase() != "CAR") {
+          startEdges.clear();
+          startEdges.add( infoPoints.get(0) );
+          destEdges.clear();
+          destEdges.add( infoPoints.get(infoPoints.size() - 1) );
+        }
+
+        // XXX A better way?
+        // If we keep the nearbyEdges PQueue to <= 5 closest edges
+        // We iterate here 25 times.. (5^2)
+        for (GHPoint start : startEdges) {
+          for (GHPoint dest : destEdges) {
+            try
+            {
+                List<GHPoint> pts = new ArrayList<GHPoint>();
+                pts.add(start);
+                // XXX add intermediate points
+                pts.add(dest);
+
+                logger.info(start + " " + dest);
+
+                JSONObject json = new JSONObject( writePath(req, resp, pts) );
+
+                if (!json.isNull("paths")) {
+                  PRoute p = new PRoute();
+
+                  // time in milliseconds, or distance in meters
+                  p.dist = (Long)(json.getJSONArray("paths").getJSONObject(0).get("distance"));
+                  p.resp = json;
+                  pr.add(p);
+                }
+            } catch (IllegalArgumentException ex)
+            {
+                writeError(resp, SC_BAD_REQUEST, ex.getMessage());
+                return;
+            } catch (Exception ex)
+            {
+                logger.error("Error while executing request: " + req.getQueryString(), ex);
+                writeError(resp, SC_INTERNAL_SERVER_ERROR, "Problem occured:" + ex.getMessage());
+            }
+          }
+        }
+
+	// XXX if all requests fail, we will return nothing...
+
+        // Set final resp to the 'best' route
+        double best = Double.MAX_VALUE;
+        for (PRoute p : pr) {
+          if (p.dist < best) {
+            resp.reset();
+            writeJson(req, resp, p.resp);
+            best = p.dist;
+          }
+        }
+
+    }
+
+    Map<String, Object> writePath( HttpServletRequest httpReq, HttpServletResponse res,  List<GHPoint> points ) throws Exception
+    {
 
         // we can reduce the path length based on the maximum differences to the original coordinates
         double minPathPrecision = getDoubleParam(httpReq, "way_point_max_distance", 1d);
@@ -98,7 +217,7 @@ public class GraphHopperServlet extends GHBaseServlet
         } else
         {
             FlagEncoder algoVehicle = hopper.getEncodingManager().getEncoder(vehicleStr);
-            GHRequest request = new GHRequest(infoPoints);
+            GHRequest request = new GHRequest(points);
 
             initHints(request, httpReq.getParameterMap());
             request.setVehicle(algoVehicle.toString()).
@@ -115,7 +234,7 @@ public class GraphHopperServlet extends GHBaseServlet
 
         float took = sw.stop().getSeconds();
         String infoStr = httpReq.getRemoteAddr() + " " + httpReq.getLocale() + " " + httpReq.getHeader("User-Agent");
-        String logStr = httpReq.getQueryString() + " " + infoStr + " " + infoPoints + ", took:"
+        String logStr = httpReq.getQueryString() + " " + infoStr + " " + points + ", took:"
                 + took + ", " + algoStr + ", " + weighting + ", " + vehicleStr;
 
         if (ghRsp.hasErrors())
@@ -127,8 +246,11 @@ public class GraphHopperServlet extends GHBaseServlet
 
         if (writeGPX)
             writeResponse(res, createGPXString(httpReq, res, ghRsp));
-        else
-            writeJson(httpReq, res, new JSONObject(createJson(httpReq, ghRsp, took)));
+        else {
+            return createJson(httpReq, ghRsp, took);
+        }
+
+        return null;
     }
 
     protected String createGPXString( HttpServletRequest req, HttpServletResponse res, GHResponse rsp )
