@@ -25,6 +25,9 @@ import com.graphhopper.routing.util.WeightingMap;
 import com.graphhopper.util.*;
 import com.graphhopper.util.Helper;
 import com.graphhopper.util.shapes.GHPoint;
+import com.graphhopper.routing.util.FlagEncoder;
+import com.graphhopper.routing.util.EncodingManager;
+
 import java.io.IOException;
 import java.io.StringWriter;
 import java.util.*;
@@ -59,7 +62,7 @@ public class GraphHopperServlet extends GHBaseServlet
     private GraphHopper hopper;
 
     public static class PEdge {
-      public int edge;
+      public GHPoint edge;
       public double dist;
 
       public static Comparator<PEdge> compare = new Comparator<PEdge>() {
@@ -70,12 +73,13 @@ public class GraphHopperServlet extends GHBaseServlet
     }
 
     public static class PRoute {
-        public long dist; // XXX time or distance?
+        public double dist; // XXX time or distance?
+        public double dist2;
         public JSONObject resp;
 
         public static Comparator<PRoute> compare = new Comparator<PRoute>() {
           public int compare(PRoute a, PRoute b) {
-            return (a.dist > b.dist) ? 1 : -1;
+            return (a.dist > b.dist && a.dist2 > b.dist2) ? 1 : -1;
           }
         };
     }
@@ -84,36 +88,36 @@ public class GraphHopperServlet extends GHBaseServlet
        This is helpful for cases where a destination point may not have any
        connectivity to permitted edges and avoid outright failing to find a route.
      */
-    public List<GHPoint> getNearbyEdges(GHPoint req) {
-      List<GHPoint> points = new ArrayList<GHPoint>();
+    public List<PEdge> getNearbyEdges(GHPoint req, String vehicle) {
+      List<PEdge> points = new ArrayList<PEdge>();
 
       MinMaxPriorityQueue<PEdge> pq = MinMaxPriorityQueue.orderedBy(PEdge.compare).maximumSize(10).create();
       DistanceCalcEarth calc = new DistanceCalcEarth();
       EdgeIterator iter = hopper.getGraph().getAllEdges();
+      FlagEncoder encoder = new EncodingManager(vehicle).getEncoder(vehicle);
 
-/*
-      LocationIndex index = hopper.getLocationIndex();
       PEdge tmp = new PEdge();
       tmp.dist = 0; // XXX assume the original start/end are dist=0..
-      tmp.edge = 
+      tmp.edge = req;
       pq.add(tmp);
-*/
 
       while (iter.next()) {
         double dist;
+
+        // Skip edges w/o appropriate permissions for vehicle
+        if ( ! encoder.isBool( iter.getFlags(), encoder.K_FORWARD ) ) continue;
 
         dist = calc.calcDist(hopper.getGraph().getNodeAccess().getLatitude( iter.getEdge() ), hopper.getGraph().getNodeAccess().getLongitude( iter.getEdge() ), req.lat, req.lon);
 
         tmp = new PEdge();
         tmp.dist = dist;
-        tmp.edge = iter.getEdge();
+        tmp.edge = new GHPoint(hopper.getGraph().getNodeAccess().getLatitude(iter.getEdge()), hopper.getGraph().getNodeAccess().getLongitude(iter.getEdge()));
         pq.add(tmp);
 
       }
 
       for (PEdge p : pq) {
-        GHPoint pt = new GHPoint(hopper.getGraph().getNodeAccess().getLatitude(p.edge), hopper.getGraph().getNodeAccess().getLongitude(p.edge));
-        points.add(pt);
+        points.add(p);
       }
 
       return points;
@@ -129,30 +133,28 @@ public class GraphHopperServlet extends GHBaseServlet
         List<GHPoint> infoPoints = getPoints(req, "point");
 
         // Find nearby START points for alternative routes
-        List<GHPoint> startEdges = getNearbyEdges(infoPoints.get(0));
+        List<PEdge> startEdges = getNearbyEdges(infoPoints.get(0), getParam(req, "vehicle", "CAR").toUpperCase());
 
         // Find nearby END points for alternative routes
-        List<GHPoint> destEdges = getNearbyEdges(infoPoints.get(infoPoints.size() - 1));
+        List<PEdge> destEdges = getNearbyEdges(infoPoints.get(infoPoints.size() - 1), getParam(req, "vehicle", "CAR").toUpperCase());
 
-        // XXX Workaround: Only use the nearby edges for CAR traversals
-        if (getParam(req, "vehicle", "CAR").toUpperCase() != "CAR") {
-          startEdges.clear();
-          startEdges.add( infoPoints.get(0) );
-          destEdges.clear();
-          destEdges.add( infoPoints.get(infoPoints.size() - 1) );
-        }
+// XXX We need to consider the best combination of: distance from start/dest AND overall route distance for at least walking paths
 
         // XXX A better way?
         // If we keep the nearbyEdges PQueue to <= 5 closest edges
         // We iterate here 25 times.. (5^2)
-        for (GHPoint start : startEdges) {
-          for (GHPoint dest : destEdges) {
+        for (PEdge start : startEdges) {
+          GHPoint spt = start.edge;
+
+          for (PEdge dest : destEdges) {
             try
             {
+                GHPoint dpt = dest.edge;
+
                 List<GHPoint> pts = new ArrayList<GHPoint>();
-                pts.add(start);
+                pts.add(spt);
                 // XXX add intermediate points
-                pts.add(dest);
+                pts.add(dpt);
 
                 logger.info(start + " " + dest);
 
@@ -162,7 +164,8 @@ public class GraphHopperServlet extends GHBaseServlet
                   PRoute p = new PRoute();
 
                   // time in milliseconds, or distance in meters
-                  p.dist = (Long)(json.getJSONArray("paths").getJSONObject(0).get("distance"));
+                  p.dist = (Double)(json.getJSONArray("paths").getJSONObject(0).get("distance"));
+                  p.dist2 = start.dist + dest.dist;
                   p.resp = json;
                   pr.add(p);
                 }
@@ -183,10 +186,12 @@ public class GraphHopperServlet extends GHBaseServlet
         // Set final resp to the 'best' route
         double best = Double.MAX_VALUE;
         for (PRoute p : pr) {
-          if (p.dist < best) {
+          logger.info( String.format("dist=%f dist2=%f\n", p.dist, p.dist2));
+
+          if (p.dist+p.dist2 < best) {
             resp.reset();
             writeJson(req, resp, p.resp);
-            best = p.dist;
+            best = p.dist+p.dist2;
           }
         }
 
